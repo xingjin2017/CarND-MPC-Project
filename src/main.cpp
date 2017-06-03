@@ -32,15 +32,6 @@ string hasData(string s) {
   return "";
 }
 
-// Evaluate a polynomial.
-double polyeval(Eigen::VectorXd coeffs, double x) {
-  double result = 0.0;
-  for (int i = 0; i < coeffs.size(); i++) {
-    result += coeffs[i] * pow(x, i);
-  }
-  return result;
-}
-
 // Fit a polynomial.
 // Adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
@@ -65,6 +56,42 @@ Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
   return result;
 }
 
+// Evaluate a polynomial.
+double polyeval(Eigen::VectorXd coeffs, double x) {
+  double result = 0.0;
+  for (int i = 0; i < coeffs.size(); i++) {
+    result += coeffs[i] * pow(x, i);
+  }
+  return result;
+}
+
+// Direvative at x
+double polydirevative(Eigen::VectorXd coeffs, double x) {
+  double result = 0.0;
+  for (int i = 1; i < coeffs.size(); i++) {
+    result += i * coeffs[i] * pow(x, i - 1);
+  }
+  return result;
+}
+
+// Transform to vechicle coordinates.
+void coordinatesTransform(const vector<double>& ptsx,
+			  const vector<double>& ptsy,
+			  double map_x, double map_y, double map_psi,
+			  Eigen::VectorXd& vechicle_ptsx, Eigen::VectorXd& vechicle_ptsy) {
+  const int n = ptsx.size();
+  Eigen::MatrixXd positions(n,2);
+  positions << Eigen::Map<const Eigen::VectorXd>(ptsx.data(), ptsx.size()),
+    Eigen::Map<const Eigen::VectorXd>(ptsy.data(), ptsy.size());
+
+  Eigen::Matrix2d rotate;
+  rotate << cos(-map_psi), -sin(-map_psi), -sin(-map_psi), -cos(-map_psi);
+  positions.rowwise() -= Eigen::RowVector2d(map_x, map_y);
+  positions = positions * rotate.transpose();
+  vechicle_ptsx = positions.col(0);
+  vechicle_ptsy = positions.col(1);
+}
+
 int main() {
   uWS::Hub h;
 
@@ -77,7 +104,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    //cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -98,27 +125,48 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          double steer_value;
-          double throttle_value;
+	  Eigen::VectorXd  vechicle_ptsx;
+	  Eigen::VectorXd vechicle_ptsy;
+	  coordinatesTransform(ptsx, ptsy, px, py, psi, vechicle_ptsx,
+			       vechicle_ptsy);
+	  auto coeffs = polyfit(vechicle_ptsx, vechicle_ptsy, 3);
+	  double cte = polyeval(coeffs, 0) - 0; 
+	  double epsi = -atan(polydirevative(coeffs, px)) - 0.0;
+	  Eigen::VectorXd state(6);
+	  state << 0.0, 0.0, 0.0, v, cte, epsi;
+          //std::cout << "state: " << state << std::endl;
 
+	  auto vars = mpc.Solve(state, coeffs);
+	  double steer_value = vars[0];
+	  double throttle_value = vars[1];
+	  
           json msgJson;
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
+	  bool displayTrajectories = false;
           //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
-
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
 
+	  if (displayTrajectories) {
+	    mpc_x_vals = mpc.getXs();
+	    mpc_y_vals = mpc.getYs();
+	  }
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
           //Display the waypoints/reference line
           vector<double> next_x_vals;
           vector<double> next_y_vals;
-
+	  if (displayTrajectories) {
+	    next_x_vals.resize(vechicle_ptsx.size());
+	    next_y_vals.resize(vechicle_ptsy.size());
+	    Eigen::VectorXd::Map(&next_x_vals[0], vechicle_ptsx.size()) = vechicle_ptsx;
+	    Eigen::VectorXd::Map(&next_y_vals[0], vechicle_ptsy.size()) = vechicle_ptsy;
+	  }
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
 
@@ -127,7 +175,7 @@ int main() {
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.
