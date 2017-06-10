@@ -28,8 +28,10 @@ for (int i = 0; i < N - 2; i++) {
     fg[0] += CppAD::pow(vars[steer_start + i + 1] - vars[steer_start + i], 2);
     fg[0] += CppAD::pow(vars[throttle_start + i + 1] - vars[throttle_start + i], 2);
 }
+</pre>
 
 Used these equations for the model:
+<pre>
 x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
 y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
 psi_[t+1] = psi[t] - v[t] / Lf * delta[t] * dt
