@@ -7,6 +7,7 @@ The model is based on Model Predictive Control: given a reference trajectory, us
 
 Here is the cost function defined; the emphais is given to minimize cross track error and orientation error, with regard to the reference trajectory, while taking other factors into account, e.g. control smoothness:
 
+<pre>
 double ref_cte = 0;
 double ref_epsi = 0;
 double ref_v = 50;
@@ -36,6 +37,7 @@ v_[t+1] = v[t] + a[t] * dt
 cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
 epsi[t+1] = psi[t] - psides[t] - v[t] * delta[t] / Lf * dt
 
+</pre>
 
 * Timestep Length and Elapsed Duration (N & dt)
 
