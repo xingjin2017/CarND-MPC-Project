@@ -1,6 +1,58 @@
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
+* The Model
+
+The model is based on Model Predictive Control: given a reference trajectory, using ipopt optimizer to optimize a tracjectory/control(steering and throttling) parameters to achive a lowest defined cost function value. The state used in the project includes: poistion x in vechicle coordinates, position y in vechicle coordinates, psi orientation angle in the vechicle cooridnates, velocity, cte cross track error, and orientation error epsi. The actuators are the steering parameter and the throttle parameter that get to sent to the car control as the model output. The updates are performed everytime the vechicle comes back to the controller with the current state of position, velocity, orientation, throttle and steering, with a reference of target trajectory.
+
+Here is the cost function defined; the emphais is given to minimize cross track error and orientation error, with regard to the reference trajectory, while taking other factors into account, e.g. control smoothness:
+
+double ref_cte = 0;
+double ref_epsi = 0;
+double ref_v = 50;
+
+fg[0] = 0;
+
+for (int i = 0; i < N; i++) {
+    fg[0] += 1000*CppAD::pow(vars[cte_start + i] - ref_cte, 2);
+    fg[0] += 1000*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
+    fg[0] += 2*CppAD::pow(vars[v_start + i] - ref_v, 2);
+}
+for (int i = 0; i < N - 1; i++) {
+    fg[0] += CppAD::pow(vars[steer_start + i], 2);
+    fg[0] += CppAD::pow(vars[throttle_start + i], 2);
+}
+
+for (int i = 0; i < N - 2; i++) {
+    fg[0] += CppAD::pow(vars[steer_start + i + 1] - vars[steer_start + i], 2);
+    fg[0] += CppAD::pow(vars[throttle_start + i + 1] - vars[throttle_start + i], 2);
+}
+
+Used these equations for the model:
+x_[t+1] = x[t] + v[t] * cos(psi[t]) * dt
+y_[t+1] = y[t] + v[t] * sin(psi[t]) * dt
+psi_[t+1] = psi[t] - v[t] / Lf * delta[t] * dt
+v_[t+1] = v[t] + a[t] * dt
+cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
+epsi[t+1] = psi[t] - psides[t] - v[t] * delta[t] / Lf * dt
+
+
+* Timestep Length and Elapsed Duration (N & dt)
+
+The timestep choosen is N=10 and duration dt 0.1 second. These seem to be moderate values, given the target spped of 50mph, not too far into the future, while have a meaningfully long trajectory to coincide with the reference trajectory. Previously also tried N of 25, which worked with a lower speed.
+
+* Polynomial Fitting and MPC Preprocessing
+
+Uses a third order polynomial, which was mentioned in the lecture to work in the real world scenario.
+
+* If the student preprocesses waypoints, the vehicle state, and/or actuators prior to the MPC procedure it is described.
+
+All the reference trajectory waypoints and the latency prediction are done in the vechicle's coordinate frame. This is very important, because the vechicle coordinate frame centers the vechiles at 0.0, 0.0 and makes any incremental calculation so much more accurate. The map coordinates are all transformed into vechicle coordinates, taking into account both vechicle position and orientation.
+
+* Model Predictive Control with Latency
+
+The 100 millisecond latency is handled by using the vechicle's current position/orientation/steering/throttle and project 100 millisecond into the future. This projected future state expected 100 millisecond later is used as the initial state for the MPC controller.
+
 ---
 
 ## Dependencies
