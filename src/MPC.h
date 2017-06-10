@@ -18,7 +18,7 @@ class MPC {
 
   vector<double> getXs();
   vector<double> getYs();
-
+  
  private:
   vector<double> solutionx;
 };

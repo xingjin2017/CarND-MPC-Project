@@ -78,14 +78,15 @@ double polydirevative(Eigen::VectorXd coeffs, double x) {
 void coordinatesTransform(const vector<double>& ptsx,
 			  const vector<double>& ptsy,
 			  double map_x, double map_y, double map_psi,
-			  Eigen::VectorXd& vechicle_ptsx, Eigen::VectorXd& vechicle_ptsy) {
+			  Eigen::VectorXd& vechicle_ptsx,
+			  Eigen::VectorXd& vechicle_ptsy) {
   const int n = ptsx.size();
   Eigen::MatrixXd positions(n,2);
   positions << Eigen::Map<const Eigen::VectorXd>(ptsx.data(), ptsx.size()),
     Eigen::Map<const Eigen::VectorXd>(ptsy.data(), ptsy.size());
 
   Eigen::Matrix2d rotate;
-  rotate << cos(-map_psi), -sin(-map_psi), -sin(-map_psi), -cos(-map_psi);
+  rotate << cos(-map_psi), -sin(-map_psi), sin(-map_psi), cos(-map_psi);
   positions.rowwise() -= Eigen::RowVector2d(map_x, map_y);
   positions = positions * rotate.transpose();
   vechicle_ptsx = positions.col(0);
@@ -104,7 +105,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    //cout << sdata << endl;
+    // cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -125,26 +126,39 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-	  Eigen::VectorXd  vechicle_ptsx;
+	  Eigen::VectorXd vechicle_ptsx;
 	  Eigen::VectorXd vechicle_ptsy;
 	  coordinatesTransform(ptsx, ptsy, px, py, psi, vechicle_ptsx,
 			       vechicle_ptsy);
 	  auto coeffs = polyfit(vechicle_ptsx, vechicle_ptsy, 3);
-	  double cte = polyeval(coeffs, 0) - 0; 
-	  double epsi = -atan(polydirevative(coeffs, px)) - 0.0;
+	  double cte0 = polyeval(coeffs, 0) - 0; 
+	  double epsi0 = 0.0 - atan(polydirevative(coeffs, 0));
+
+	  // Handle delay of 100 milliseconds
+	  double current_steer_value = j[1]["steering_angle"];
+          double current_throttle_value = j[1]["throttle"];
+	  // Account for 100 millisecond delay
+	  double delay_sec = 0.1;
+	  double Lf = 2.67;
+	  double npx = 0.0 + v * cos(0.0) * delay_sec;
+	  double npy = 0.0 + v * sin(0.0) * delay_sec;
+	  double npsi = 0.0 - v * current_steer_value / Lf * delay_sec;
+	  double nv = v + current_throttle_value * delay_sec;
+	  double ncte = cte0 -0.0 + v * sin(epsi0) * delay_sec;
+	  double nepsi = epsi0 - v * current_steer_value / Lf * delay_sec;
 	  Eigen::VectorXd state(6);
-	  state << 0.0, 0.0, 0.0, v, cte, epsi;
-          //std::cout << "state: " << state << std::endl;
+	  state << npx, npy, npsi, nv, ncte, nepsi;
 
 	  auto vars = mpc.Solve(state, coeffs);
 	  double steer_value = vars[0];
 	  double throttle_value = vars[1];
 	  
           json msgJson;
+          //msgJson["steering_angle"] = steer_value/(deg2rad(25) * Lf);
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
-	  bool displayTrajectories = false;
+	  bool displayTrajectories = true;
           //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
@@ -162,10 +176,13 @@ int main() {
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 	  if (displayTrajectories) {
-	    next_x_vals.resize(vechicle_ptsx.size());
-	    next_y_vals.resize(vechicle_ptsy.size());
-	    Eigen::VectorXd::Map(&next_x_vals[0], vechicle_ptsx.size()) = vechicle_ptsx;
-	    Eigen::VectorXd::Map(&next_y_vals[0], vechicle_ptsy.size()) = vechicle_ptsy;
+	    for (int i = 0; i < vechicle_ptsx.size(); i++) {
+	      // Only keep points in front of the car for drawing.
+	      if (vechicle_ptsx[i] >= 0) {
+		next_x_vals.push_back(vechicle_ptsx[i]);
+		next_y_vals.push_back(vechicle_ptsy[i]);
+	      }
+	    }
 	  }
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line

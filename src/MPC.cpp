@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 20;
+size_t N = 10;
 double dt = 0.1;
 size_t x_start = 0;
 size_t y_start = x_start + N;
@@ -35,7 +35,7 @@ const double Lf = 2.67;
 // The reference velocity is set to 20 mph.
 double ref_cte = 0;
 double ref_epsi = 0;
-double ref_v = 15;
+double ref_v = 50;
 
 class FG_eval {
  public:
@@ -55,8 +55,8 @@ class FG_eval {
 
     // The part of the cost based on the reference state.
     for (int i = 0; i < N; i++) {
-      fg[0] += 100*CppAD::pow(vars[cte_start + i] - ref_cte, 2);
-      fg[0] += 100*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
+      fg[0] += 1000*CppAD::pow(vars[cte_start + i] - ref_cte, 2);
+      fg[0] += 1000*CppAD::pow(vars[epsi_start + i] - ref_epsi, 2);
       fg[0] += 10*CppAD::pow(vars[v_start + i] - ref_v, 2);
     }
 
@@ -124,12 +124,12 @@ class FG_eval {
       // epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
       fg[2 + x_start + i] = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[2 + y_start + i] = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      fg[2 + psi_start + i] = psi1 - (psi0 + v0 * steer0 / Lf * dt);
+      fg[2 + psi_start + i] = psi1 - (psi0 - v0 * steer0 / Lf * dt);
       fg[2 + v_start + i] = v1 - (v0 + throttle0 * dt);
       fg[2 + cte_start + i] =
           cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
       fg[2 + epsi_start + i] =
-          epsi1 - ((psi0 - psides0) + v0 * steer0 / Lf * dt);
+          epsi1 - ((psi0 - psides0) - v0 * steer0 / Lf * dt);
     }
   }
 };
@@ -188,8 +188,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   const double steer_limit = 0.436332;
   //const double steer_limit = 1.0;
   for (int i = steer_start; i < throttle_start; i++) {
-    vars_lowerbound[i] = -steer_limit;
-    vars_upperbound[i] = steer_limit;
+    vars_lowerbound[i] = -steer_limit*Lf;
+    vars_upperbound[i] = steer_limit*Lf;
   }
 
   // Acceleration/decceleration upper and lower limits.
@@ -270,21 +270,11 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 }
 
 vector<double> MPC::getXs() {
-  return vector<double>(solutionx.begin() + x_start, solutionx.begin() + (x_start + N));
-  /*vector<double> xs;
-  xs.push_back(solutionx[x_start]);
-  xs.push_back(solutionx[x_start + N -1]);
-  return xs;
-  */
+  return vector<double>(solutionx.begin() + x_start,
+			solutionx.begin() + (x_start + N));
 }
 
 vector<double> MPC::getYs() {
-  return vector<double>(solutionx.begin() + y_start, solutionx.begin() + (y_start + N));
-  /*vector<double> ys;
-  ys.push_back(solutionx[y_start]);
-  ys.push_back(solutionx[y_start + N -1]);
-  return ys;
-  */
+  return vector<double>(solutionx.begin() + y_start,
+			solutionx.begin() + (y_start + N));
 }
-
- 
